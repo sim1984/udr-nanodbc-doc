@@ -1228,7 +1228,7 @@ END
 
 ### Выборка данных из таблицы Postgresql
 
-В этом примере приведена производится выборка из базы данных Postgresql. Текст блока снабжён комментариями для понимания происходящего.
+В этом примере производится выборка из базы данных Postgresql. Текст блока снабжён комментариями для понимания происходящего.
 
 ```sql
 EXECUTE BLOCK
@@ -1258,7 +1258,8 @@ BEGIN
     BEGIN
       -- если соединение было неудачным
       -- вызываем функцию для завершения работы nanodbc
-      -- вместо явного вызова в скрипте эту функцию можно вызывать в ON DISCONNECT триггере
+      -- вместо явного вызова в скрипте эту функцию можно вызывать 
+      -- в ON DISCONNECT триггере
       nano$udr.finalize();
       -- после чего можно пробросить исключение далее 
       EXCEPTION;
@@ -1295,7 +1296,8 @@ BEGIN
     -- привязанные к соединению ресурсы
     conn = nano$conn.release_(conn);
     -- вызываем функцию для завершения работы nanodbc
-    -- вместо явного вызова в скрипте эту функцию можно вызывать в ON DISCONNECT триггере    
+    -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+    -- ON DISCONNECT триггере    
     nano$udr.finalize(); 
 
     WHEN EXCEPTION nano$invalid_resource,
@@ -1323,3 +1325,231 @@ BEGIN
 END
 ```
 
+### Вставка данных в таблицу Postgresql
+
+В этом примере производится вставка новой строки в таблицу. Текст блока снабжён комментариями для понимания происходящего.
+
+```sql
+EXECUTE BLOCK
+RETURNS (
+  aff_rows integer
+)
+AS
+  DECLARE conn_str varchar(512) CHARACTER SET UTF8;
+  declare variable sql_txt VARCHAR(8191) CHARACTER SET UTF8;
+  DECLARE conn ty$pointer;
+  DECLARE stmt ty$pointer;
+  DECLARE tnx ty$pointer;
+BEGIN
+  conn_str = 'DRIVER={PostgreSQL ODBC Driver(UNICODE)};SERVER=localhost;DATABASE=test;UID=postgres;PASSWORD=mypassword';
+  sql_txt = 'insert into t1(id, name) values(?, ?)';
+
+  -- инициализация nanodbc
+  -- эту функцию можно вызывать в ON CONNECT триггере
+  nano$udr.initialize(); 
+  
+  BEGIN
+    -- соединение с источником данных ODBC
+    conn = nano$conn.connection(conn_str);
+    WHEN EXCEPTION nano$nanodbc_error DO
+    BEGIN
+      -- если соединение было неудачным
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать 
+      -- в ON DISCONNECT триггере    
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+  
+  BEGIN
+    -- выделяем указатель на SQL оператор
+    stmt = nano$stmt.statement_(conn);
+    -- подготавливаем запрос
+    nano$stmt.prepare_(stmt, sql_txt);
+    -- устанавливаем параметры запроса
+    -- индекс начинается с 0!
+    nano$stmt.bind_integer(stmt, 0, 4);
+    nano$stmt.bind_u8_varchar(stmt, 1, 'Строка 4', 4 * 20);
+    -- выполняем оператор INSERT
+    nano$stmt.just_execute(stmt);
+    -- получаем количество затронутых строк
+    aff_rows = nano$stmt.affected_rows(stmt);
+    -- освобождаем ранее выделенные ресурсы
+    conn = nano$conn.release_(conn);
+    -- вызываем функцию для завершения работы nanodbc
+    -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+    -- ON DISCONNECT триггере      
+    nano$udr.finalize();
+
+    WHEN EXCEPTION nano$invalid_resource,
+         EXCEPTION nano$nanodbc_error,
+         EXCEPTION nano$binding_error
+    DO
+    BEGIN
+      -- освобождаем ранее выделенные ресурсы
+      conn = nano$conn.release_(conn);
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+      -- ON DISCONNECT триггере  
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+
+  suspend;
+END
+```
+
+### Пакетная вставка данных в таблицу Postgresql
+
+Если СУБД и ODBC драйвер поддерживают пакетное выполнение запросов, то можно использовать batch операции.
+
+```sql
+EXECUTE BLOCK
+AS
+  DECLARE conn_str varchar(512) CHARACTER SET UTF8;
+  declare variable sql_txt VARCHAR(8191) CHARACTER SET UTF8;
+  DECLARE conn ty$pointer;
+  DECLARE stmt ty$pointer;
+  DECLARE tnx ty$pointer;
+BEGIN
+  conn_str = 'DRIVER={PostgreSQL ODBC Driver(UNICODE)};SERVER=localhost;DATABASE=test;UID=postgres;PASSWORD=mypassword';
+  sql_txt = 'insert into t1(id, name) values(?, ?)';
+
+  -- инициализация nanodbc
+  -- эту функцию можно вызывать в ON CONNECT триггере
+  nano$udr.initialize(); 
+  
+  BEGIN
+    -- соединение с источником данных ODBC
+    conn = nano$conn.connection(conn_str);
+    WHEN EXCEPTION nano$nanodbc_error DO
+    BEGIN
+      -- если соединение было неудачным
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать 
+      -- в ON DISCONNECT триггере    
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+  
+  BEGIN
+    -- выделяем указатель на SQL оператор
+    stmt = nano$stmt.statement_(conn);
+    -- подготавливаем запрос
+    nano$stmt.prepare_(stmt, sql_txt);
+    -- устанавливаем параметры запроса
+    -- индекс начинается с 0!
+    -- первая запись
+    nano$stmt.bind_integer(stmt, 0, 5);
+    nano$stmt.bind_u8_varchar(stmt, 1, 'Строка 5', 4 * 20);
+    -- вторая запись
+    nano$stmt.bind_integer(stmt, 0, 6);
+    nano$stmt.bind_u8_varchar(stmt, 1, 'Строка 6', 4 * 20);    
+    -- выполняем оператор INSERT, с размером пакета 2
+    nano$stmt.just_execute(stmt, 2);
+    -- освобождаем ранее выделенные ресурсы
+    conn = nano$conn.release_(conn);
+    -- вызываем функцию для завершения работы nanodbc
+    -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+    -- ON DISCONNECT триггере      
+    nano$udr.finalize();
+
+    WHEN EXCEPTION nano$invalid_resource,
+         EXCEPTION nano$nanodbc_error,
+         EXCEPTION nano$binding_error
+    DO
+    BEGIN
+      -- освобождаем ранее выделенные ресурсы
+      conn = nano$conn.release_(conn);
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+      -- ON DISCONNECT триггере  
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+END
+```
+
+### Использование транзакций
+
+```sql
+EXECUTE BLOCK
+AS
+  DECLARE conn_str varchar(512) CHARACTER SET UTF8;
+  DECLARE sql_txt VARCHAR(8191) CHARACTER SET UTF8;
+  DECLARE sql_txt2 VARCHAR(8191) CHARACTER SET UTF8;
+  DECLARE conn ty$pointer;
+  DECLARE stmt ty$pointer;
+  DECLARE stmt2 ty$pointer;
+  DECLARE tnx ty$pointer;
+BEGIN
+  conn_str = 'DRIVER={PostgreSQL ODBC Driver(UNICODE)};SERVER=localhost;DATABASE=test;UID=postgres;PASSWORD=mypassword';
+  sql_txt = 'insert into t1(id, name) values(?, ?)';
+  sql_txt2 = 'insert into t2(id, name) values(?, ?)';
+
+  -- инициализация nanodbc
+  -- эту функцию можно вызывать в ON CONNECT триггере
+  nano$udr.initialize(); 
+  
+  BEGIN
+    -- соединение с источником данных ODBC
+    conn = nano$conn.connection(conn_str);
+    WHEN EXCEPTION nano$nanodbc_error DO
+    BEGIN
+      -- если соединение было неудачным
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать 
+      -- в ON DISCONNECT триггере      
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+  
+  BEGIN
+    -- подготавливаем первый SQL запрос
+    stmt = nano$stmt.statement_(conn);
+    nano$stmt.prepare_(stmt, sql_txt);
+    -- подготавливаем второй SQL запрос
+    stmt2 = nano$stmt.statement_(conn);
+    nano$stmt.prepare_(stmt2, sql_txt2);
+    -- стартуем транзакцию
+    tnx = nano$tnx.transaction_(conn);
+    --выполняем первый запрос в рамках транзакции
+    nano$stmt.bind_integer(stmt, 0, 8);
+    nano$stmt.bind_u8_varchar(stmt, 1, 'Строка 8', 4 * 20);
+    nano$stmt.just_execute(stmt);
+    --выполняем второй запрос в рамках транзакции
+    nano$stmt.bind_integer(stmt2, 0, 1);
+    nano$stmt.bind_u8_varchar(stmt2, 1, 'Строка 1', 4 * 20);
+    nano$stmt.just_execute(stmt2);
+    -- подтверждаем транзакцию
+    nano$tnx.commit_(tnx);
+
+    -- освобождаем ранее выделенные ресурсы
+    conn = nano$conn.release_(conn);
+    -- вызываем функцию для завершения работы nanodbc
+    -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+    -- ON DISCONNECT триггере      
+    nano$udr.finalize();
+
+    WHEN EXCEPTION nano$invalid_resource,
+         EXCEPTION nano$nanodbc_error,
+         EXCEPTION nano$binding_error
+    DO
+    BEGIN
+      -- освобождаем ранее выделенные ресурсы
+      -- в случаем ошибки неподтверждённая транзакция откатится автоматически
+      conn = nano$conn.release_(conn);
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызова в скрипте эту функцию можно вызывать в 
+      -- ON DISCONNECT триггере         
+      nano$udr.finalize();
+      EXCEPTION;
+    END
+  END
+END
+```

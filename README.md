@@ -1172,3 +1172,119 @@ BEGIN
 END
 ```
 
+Пакет `NANO$FUNC` содержит функции для работы с SQL запросами. Этот пакет является облегчённой версией пакета `NANO$STMT`.
+
+Функция `execute_conn()` подготавливает и выполняет SQL запрос. Функция возвращает указатель на набор данных (курсор), который можно обработать с помощью функций пакета `NANO$RSLT`. Параметры:
+- `conn` - указатель на соединение;
+- `query` - текст SQL запроса;
+- `batch_operations` - количество пакетных операций. По умолчанию равно 1;
+- `timeout` - тайм-аут SQL оператора.
+
+Функция `just_execute_conn()` подготавливает и выполняет SQL запрос. Функция предназначена для выполнения SQL операторов не возвращающих данные (не открывающих курсор). Параметры:
+- `conn` - указатель на соединение;
+- `query` - текст SQL запроса;
+- `batch_operations` - количество пакетных операций. По умолчанию равно 1;
+- `timeout` - тайм-аут SQL оператора.
+
+
+Функция `execute_stmt()` выполняет подготовленный SQL запрос. Функция возвращает указатель на набор данных (курсор), который можно обработать с помощью функций пакета `NANO$RSLT`. Параметры:
+- `stmt` - указатель на подготовленный запрос;
+- `batch_operations` - количество пакетных операций. По умолчанию NANO$STMT равно 1.
+
+Функция `transact_stmt()` - ???
+
+Функция `just_transact_stmt()` - ???
+
+Функция `execute_stmt()` подготовливает SQL запрос.  Параметры:
+- `stmt` - указатель на запрос;
+- `query` - текст SQL запроса;
+- `timeout` - тайм-аут SQL оператора.
+
+## Примеры
+
+### Выборка данных из таблицы Postgresql
+
+В этом примере приведена производится выборка из базы данных Postgresql. Текст блока снабжон комментариями для понимания происходящего.
+
+```sql
+EXECUTE BLOCK
+RETURNS (
+  id bigint,
+  name VARCHAR(1024) CHARACTER SET UTF8
+)
+AS
+  DECLARE conn_str varchar(512) CHARACTER SET UTF8;
+  declare variable sql_txt VARCHAR(8191) CHARACTER SET UTF8;
+  DECLARE conn ty$pointer;
+  DECLARE stmt ty$pointer;
+  DECLARE rs ty$pointer;
+  DECLARE tnx ty$pointer;
+BEGIN
+  conn_str = 'DRIVER={PostgreSQL ODBC Driver(UNICODE)};SERVER=localhost;DATABASE=test;UID=postgres;PASSWORD=mypassword';
+  sql_txt = 'select * from t1';
+
+  -- инициализация nanodbc
+  -- эту функцию можно вызывать в ON CONNECT триггере
+  nano$udr.initialize(); 
+  
+  BEGIN
+    -- соедиенение с источником данных ODBC
+    conn = nano$conn.connection(conn_str);
+    WHEN EXCEPTION nano$nanodbc_error DO
+    BEGIN
+      -- если соединение было неудачным
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызлва в скрипте эту функцию можно вызывать в ON DISCONNECT триггере
+      nano$udr.finalize();
+      -- после чего можно проброисть исключение далее 
+      EXCEPTION;
+    END
+  END
+  
+  BEGIN
+    -- выделяем указатель на SQL оператор
+    stmt = nano$stmt.statement_(conn);
+    -- подготавливаем запрос
+    nano$stmt.prepare_(stmt, sql_txt);
+    -- выполняем запрос
+    -- функция возвращает указатель на набор данных
+    rs = nano$stmt.execute_(stmt);
+    -- пока в кусоре есть записи перемещаемся по нему вперёд
+    while (nano$rslt.next_(rs)) do
+    begin
+      -- для каждого столбца необходимо в зависимости от его типа вызывать
+      -- соовтествующую функцию
+      id = nano$rslt.get_integer(rs, 'id');
+      -- обратите внимание, поскольку мы работает с UTF8 вызывается функция с u8
+      name = nano$rslt.get_u8_char_l(rs, 'name');
+      suspend;
+    end
+
+    -- освобождаем ранее выделенные ресурсы
+    rs = nano$rslt.release_(rs);
+    stmt = nano$stmt.release_(stmt);
+    conn = nano$conn.release_(conn);
+    -- вызываем функцию для завершения работы nanodbc
+    -- вместо явного вызлва в скрипте эту функцию можно вызывать в ON DISCONNECT триггере    
+    nano$udr.finalize(); 
+
+    WHEN EXCEPTION nano$invalid_resource,
+         EXCEPTION nano$nanodbc_error,
+         EXCEPTION nano$binding_error
+    DO
+    BEGIN
+      -- если произошла ошибка
+      -- освобождаем ранее выделенные ресурсы
+      rs = nano$rslt.release_(rs);
+      stmt = nano$stmt.release_(stmt);
+      conn = nano$conn.release_(conn);
+      -- вызываем функцию для завершения работы nanodbc
+      -- вместо явного вызлва в скрипте эту функцию можно вызывать в ON DISCONNECT триггере      
+      nano$udr.finalize(); 
+      -- после чего можно проброисть исключение далее 
+      EXCEPTION;
+    END
+  END
+END
+```
+

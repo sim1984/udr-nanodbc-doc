@@ -20,7 +20,7 @@
 
 где firebird — корневой каталог установки Firebird.
 
-Далее библиотеку необходимо зарегистрировать в вашей базе данных. Для этого необходимо выполнить последовательно следующие скрипты:
+Далее библиотеку необходимо зарегистрировать в вашей базе данных. Для этого необходимо выполнить скрипт [nanodbc_install.sql](https://github.com/sim1984/udr-nanodbc-doc/sql/nanodbc_install.sql) или последовательно следующие скрипты:
 
 1. [sql/ty$.sql](https://github.com/mnf71/udr-nanodbc/blob/master/sql/ty%24.sql)
 2. [sql/except.sql](https://github.com/mnf71/udr-nanodbc/blob/master/sql/except.sql)

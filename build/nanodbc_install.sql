@@ -1,0 +1,1585 @@
+CREATE DOMAIN TY$POINTER AS CHAR(8) CHARACTER SET OCTETS COLLATE OCTETS;
+CREATE DOMAIN TY$NANO_BLANK AS SMALLINT;
+
+CREATE EXCEPTION NANO$RESOURCES_UNDEFINED 'Attachment resources undefined.';
+CREATE EXCEPTION NANO$INVALID_RESOURCE '';
+CREATE EXCEPTION NANO$NANOUDR_ERROR '';
+CREATE EXCEPTION NANO$NANODBC_ERROR '';
+CREATE EXCEPTION NANO$BINDING_ERROR '';
+CREATE EXCEPTION NANO$FETCHING_ERROR '';
+
+SET TERM ^ ;
+
+CREATE OR ALTER PACKAGE NANO$UDR
+AS
+BEGIN
+
+  FUNCTION initialize RETURNS TY$NANO_BLANK;
+  FUNCTION finalize RETURNS TY$NANO_BLANK;
+  FUNCTION expunge RETURNS TY$NANO_BLANK;
+
+  FUNCTION locale(
+      set_locale VARCHAR(20) CHARACTER SET NONE DEFAULT NULL /* NULL - Get */
+    ) RETURNS VARCHAR(20);
+
+  FUNCTION error_message RETURNS VARCHAR(512) CHARACTER SET UTF8;
+
+END^
+
+RECREATE PACKAGE BODY NANO$UDR
+AS
+BEGIN
+
+  FUNCTION initialize RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!udr$initialize'
+    ENGINE UDR;
+
+  FUNCTION finalize RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!udr$finalize'
+    ENGINE UDR;
+
+  FUNCTION expunge RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!udr$expunge'
+    ENGINE UDR;
+
+  FUNCTION locale(
+      set_locale VARCHAR(20) CHARACTER SET NONE
+    ) RETURNS VARCHAR(20)
+    EXTERNAL NAME 'nano!udr$locale'
+    ENGINE UDR;
+
+  FUNCTION error_message RETURNS VARCHAR(512) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!udr$error_message'
+    ENGINE UDR;
+
+END^
+
+CREATE OR ALTER PACKAGE NANO$CONN
+AS
+BEGIN
+
+  /*  Note:
+        CHARACTER SET UTF8
+        attr VARCHAR(512) CHARACTER SET UTF8 DEFAULT NULL
+        ...
+        CHARACTER SET WIN1251
+        attr VARCHAR(2048) CHARACTER SET WIN1251 DEFAULT NULL
+   */
+
+  FUNCTION connection(
+      attr VARCHAR(512) CHARACTER SET UTF8 DEFAULT NULL,
+      user_ VARCHAR(63) CHARACTER SET UTF8 DEFAULT NULL,
+      pass VARCHAR(63) CHARACTER SET UTF8 DEFAULT NULL,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$POINTER;
+
+  FUNCTION valid(conn TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION release_(conn TY$POINTER NOT NULL) RETURNS TY$POINTER;
+  FUNCTION expunge(conn ty$pointer NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION allocate(conn ty$pointer NOT NULL) RETURNS TY$NANO_BLANK;
+  FUNCTION deallocate(conn ty$pointer NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION txn_read_uncommitted RETURNS SMALLINT;
+  FUNCTION txn_read_committed RETURNS SMALLINT;
+  FUNCTION txn_repeatable_read RETURNS SMALLINT;
+  FUNCTION txn_serializable RETURNS SMALLINT;
+
+  FUNCTION isolation_level(
+      conn TY$POINTER NOT NULL,
+      level_ SMALLINT DEFAULT NULL /* NULL - get usage */
+    ) RETURNS SMALLINT;
+
+  FUNCTION connect_(
+      conn TY$POINTER NOT NULL,
+      attr VARCHAR(512) CHARACTER SET UTF8 NOT NULL,
+      user_ VARCHAR(63) CHARACTER SET UTF8 DEFAULT NULL,
+      pass VARCHAR(63) CHARACTER SET UTF8 DEFAULT NULL,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION connected(conn TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION disconnect_(conn ty$pointer NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION transactions(conn TY$POINTER NOT NULL) RETURNS INTEGER;
+
+  FUNCTION get_info(conn TY$POINTER NOT NULL, info_type SMALLINT NOT NULL)
+    RETURNS VARCHAR(256) CHARACTER SET UTF8;
+
+  FUNCTION dbms_name(conn ty$pointer NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8;
+  FUNCTION dbms_version(conn ty$pointer NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8;
+  FUNCTION driver_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8;
+  FUNCTION database_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8;
+  FUNCTION catalog_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8;
+
+END^
+
+RECREATE PACKAGE BODY NANO$CONN
+AS
+BEGIN
+
+  FUNCTION connection(
+      attr VARCHAR(512) CHARACTER SET UTF8,
+      user_ VARCHAR(63) CHARACTER SET UTF8,
+      pass VARCHAR(63) CHARACTER SET UTF8,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!conn$connection'
+    ENGINE UDR;
+
+  FUNCTION valid(conn TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!conn$valid'
+    ENGINE UDR;
+
+  FUNCTION release_(conn TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!conn$release'
+    ENGINE UDR;
+
+  FUNCTION expunge(conn ty$pointer NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!conn$expunge'
+    ENGINE UDR;
+
+  FUNCTION allocate(conn TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!conn$allocate'
+    ENGINE UDR;
+
+  FUNCTION deallocate(conn TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!conn$deallocate'
+    ENGINE UDR;
+
+  FUNCTION txn_read_uncommitted RETURNS SMALLINT AS BEGIN RETURN 1; END
+  FUNCTION txn_read_committed RETURNS SMALLINT AS BEGIN RETURN 2; END
+  FUNCTION txn_repeatable_read RETURNS SMALLINT AS BEGIN RETURN 4; END
+  FUNCTION txn_serializable RETURNS SMALLINT AS BEGIN RETURN 8; END
+
+  FUNCTION isolation_level(conn TY$POINTER NOT NULL, level_ SMALLINT) RETURNS SMALLINT
+    EXTERNAL NAME 'nano!conn$isolation_level'
+    ENGINE UDR;
+
+  FUNCTION connect_(
+      conn TY$POINTER NOT NULL,
+      attr VARCHAR(512) CHARACTER SET UTF8 NOT NULL,
+      user_ VARCHAR(63) CHARACTER SET UTF8,
+      pass VARCHAR(63) CHARACTER SET UTF8,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!conn$connect'
+    ENGINE UDR;
+
+  FUNCTION connected(
+      conn TY$POINTER NOT NULL
+    ) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!conn$connected'
+    ENGINE UDR;
+
+  FUNCTION disconnect_(conn TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!conn$disconnect'
+    ENGINE UDR;
+
+  FUNCTION transactions(conn TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!conn$transactions'
+    ENGINE UDR;
+
+  FUNCTION get_info(conn TY$POINTER NOT NULL, info_type SMALLINT NOT NULL)
+    RETURNS VARCHAR(256) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$get_info'
+    ENGINE UDR;
+
+  FUNCTION dbms_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$dbms_name'
+    ENGINE UDR;
+
+  FUNCTION dbms_version(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$dbms_version'
+    ENGINE UDR;
+
+  FUNCTION driver_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$driver_name'
+    ENGINE UDR;
+
+  FUNCTION database_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$database_name'
+    ENGINE UDR;
+
+  FUNCTION catalog_name(conn TY$POINTER NOT NULL) RETURNS VARCHAR(128) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!conn$catalog_name'
+    ENGINE UDR;
+
+END^
+
+CREATE OR ALTER PACKAGE NANO$TNX
+AS
+BEGIN
+ 
+  FUNCTION transaction_(conn TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION valid(tnx TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION release_(tnx ty$pointer NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION connection(tnx TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION commit_(tnx TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+  FUNCTION rollback_(tnx TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+
+END^
+
+RECREATE PACKAGE BODY NANO$TNX
+AS
+BEGIN
+
+  FUNCTION transaction_(conn TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!tnx$transaction'
+    ENGINE UDR;
+
+  FUNCTION valid(tnx TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!tnx$valid'
+    ENGINE UDR;
+
+  FUNCTION release_(tnx ty$pointer NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!tnx$release'
+    ENGINE UDR;
+
+  FUNCTION connection(tnx TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!tnx$connection'
+    ENGINE UDR;
+
+  FUNCTION commit_(tnx TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!tnx$commit'
+    ENGINE UDR;
+
+  FUNCTION rollback_(tnx TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!tnx$rollback'
+    ENGINE UDR;
+
+END^
+
+
+CREATE OR ALTER PACKAGE NANO$STMT
+AS
+BEGIN
+
+  FUNCTION statement_(
+      conn TY$POINTER DEFAULT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 DEFAULT NULL,
+      scrollable BOOLEAN DEFAULT NULL /* NULL - default ODBC driver */,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$POINTER;
+
+  FUNCTION valid(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION release_(stmt TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION connected(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION connection(stmt TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION open_(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION close_(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION cancel(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION closed(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION prepare_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN DEFAULT NULL /* NULL - default ODBC driver */,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION prepare_(
+      stmt TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN DEFAULT NULL /* NULL - default ODBC driver */,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION scrollable(
+      stmt TY$POINTER NOT NULL,
+      usage_ BOOLEAN DEFAULT NULL /* NULL - get usage */
+    ) RETURNS BOOLEAN;
+
+  FUNCTION timeout(
+      stmt TY$POINTER NOT NULL,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION execute_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN DEFAULT NULL /* NULL - default ODBC driver */,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$POINTER;
+
+  FUNCTION just_execute_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION execute_(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$POINTER;
+
+  FUNCTION just_execute(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION procedure_columns(
+      stmt TY$POINTER NOT NULL,
+      catalog_ VARCHAR(128) CHARACTER SET UTF8 NOT NULL,
+      schema_ VARCHAR(128) CHARACTER SET UTF8 NOT NULL,
+      procedure_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL,
+      column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TY$POINTER;
+
+  FUNCTION affected_rows(stmt TY$POINTER NOT NULL) RETURNS INTEGER;
+  FUNCTION columns(stmt TY$POINTER NOT NULL) RETURNS SMALLINT;
+  FUNCTION parameters(stmt TY$POINTER NOT NULL) RETURNS SMALLINT;
+  FUNCTION parameter_size(stmt TY$POINTER NOT NULL, parameter_index SMALLINT NOT NULL)
+    RETURNS INTEGER;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION bind_smallint(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ SMALLINT
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_integer(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ INTEGER
+    ) RETURNS TY$NANO_BLANK;
+
+/*
+  FUNCTION bind_bigint(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BIGINT
+    ) RETURNS TY$NANO_BLANK;
+*/
+
+  FUNCTION bind_float(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ FLOAT
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_double(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ DOUBLE PRECISION
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_varchar(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      param_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_char(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ CHAR(32767) CHARACTER SET NONE,
+      param_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_u8_varchar(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ VARCHAR(8191) CHARACTER SET UTF8,
+      param_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_u8_char(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ CHAR(8191) CHARACTER SET UTF8,
+      param_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_blob(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BLOB
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_boolean(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BOOLEAN
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_date(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ DATE
+    ) RETURNS TY$NANO_BLANK;
+
+/*
+  FUNCTION bind_time(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ TIME
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt_bind'
+    ENGINE UDR;
+*/
+
+  FUNCTION bind_timestamp(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ TIMESTAMP
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION bind_null(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      batch_size INTEGER NOT NULL DEFAULT 1 -- <> 1 call nulls all batch
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION convert_varchar(
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE;
+
+  FUNCTION convert_char(
+      value_ CHAR(32767) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(32767) CHARACTER SET NONE;
+
+  FUNCTION clear_bindings(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION describe_parameter(
+      stmt TY$POINTER NOT NULL,
+      idx SMALLINT NOT NULL,
+      type_ SMALLINT NOT NULL,
+      size_ INTEGER NOT NULL,
+      scale_ SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION describe_parameters(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK;
+
+  FUNCTION reset_parameters(stmt TY$POINTER NOT NULL, timeout INTEGER NOT NULL DEFAULT 0)
+    RETURNS TY$NANO_BLANK;
+
+END^
+
+RECREATE PACKAGE BODY NANO$STMT
+AS
+BEGIN
+
+  FUNCTION statement_(
+      conn TY$POINTER,
+      query VARCHAR(8191) CHARACTER SET UTF8,
+      scrollable BOOLEAN,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$statement'
+    ENGINE UDR;
+
+  FUNCTION valid(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!stmt$valid'
+    ENGINE UDR;
+
+  FUNCTION release_(stmt TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$release'
+    ENGINE UDR;
+
+  FUNCTION connected(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!stmt$connected'
+    ENGINE UDR;
+
+  FUNCTION connection(stmt TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$connection'
+    ENGINE UDR;
+
+  FUNCTION open_(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$open'
+    ENGINE UDR;
+
+  FUNCTION close_(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$close'
+    ENGINE UDR;
+
+  FUNCTION cancel(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$cancel'
+    ENGINE UDR;
+
+  FUNCTION closed(stmt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!stmt$closed'
+    ENGINE UDR;
+
+  FUNCTION prepare_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$prepare_direct'
+    ENGINE UDR;
+
+  FUNCTION prepare_(
+      stmt TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$prepare'
+    ENGINE UDR;
+
+  FUNCTION scrollable(
+      stmt TY$POINTER NOT NULL,
+      usage_ BOOLEAN
+    ) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!stmt$scrollable'
+    ENGINE UDR;
+
+  FUNCTION timeout(
+      stmt TY$POINTER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$timeout'
+    ENGINE UDR;
+
+  FUNCTION execute_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      scrollable BOOLEAN,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$execute_direct'
+    ENGINE UDR;
+
+  FUNCTION just_execute_direct(
+      stmt TY$POINTER NOT NULL,
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$just_execute_direct'
+    ENGINE UDR;
+
+  FUNCTION execute_(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$execute'
+    ENGINE UDR;
+
+  FUNCTION just_execute(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$just_execute'
+    ENGINE UDR;
+
+  FUNCTION procedure_columns(
+      stmt TY$POINTER NOT NULL,
+      catalog_ VARCHAR(128) CHARACTER SET UTF8 NOT NULL,
+      schema_ VARCHAR(128) CHARACTER SET UTF8 NOT NULL,
+      procedure_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL,
+      column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!stmt$procedure_columns'
+    ENGINE UDR;
+
+  FUNCTION affected_rows(stmt TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!stmt$affected_rows'
+    ENGINE UDR;
+
+  FUNCTION columns(stmt TY$POINTER NOT NULL) RETURNS SMALLINT
+    EXTERNAL NAME 'nano!stmt$columns'
+    ENGINE UDR;
+
+  FUNCTION parameters(stmt TY$POINTER NOT NULL) RETURNS SMALLINT
+    EXTERNAL NAME 'nano!stmt$parameters'
+    ENGINE UDR;
+
+  FUNCTION parameter_size(stmt TY$POINTER NOT NULL, parameter_index SMALLINT NOT NULL)
+    RETURNS INTEGER
+    EXTERNAL NAME 'nano!stmt$parameter_size'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION bind_smallint(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ SMALLINT
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_integer(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ INTEGER
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+/*
+  FUNCTION bind_bigint(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BIGINT
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+*/
+
+  FUNCTION bind_float(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ FLOAT
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_double(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ DOUBLE PRECISION
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_varchar(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      param_size SMALLINT NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_char(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ CHAR(32767) CHARACTER SET NONE,
+      param_size SMALLINT NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_u8_varchar(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ VARCHAR(8191) CHARACTER SET UTF8,
+      param_size SMALLINT NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_u8_char(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ CHAR(8191) CHARACTER SET UTF8,
+      param_size SMALLINT NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_blob(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BLOB
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_boolean(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ BOOLEAN
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_date(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ DATE
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+/*
+  FUNCTION bind_time(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ TIME
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+*/
+
+  FUNCTION bind_timestamp(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      value_ TIMESTAMP
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind'
+    ENGINE UDR;
+
+  FUNCTION bind_null(
+      stmt TY$POINTER NOT NULL,
+      parameter_index SMALLINT NOT NULL,
+      batch_size INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$bind_null'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar(
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char(
+      value_ CHAR(32767) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(32767) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION clear_bindings(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$clear_bindings'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION describe_parameter(
+      stmt TY$POINTER NOT NULL,
+      idx SMALLINT NOT NULL,
+      type_ SMALLINT NOT NULL,
+      size_ INTEGER NOT NULL,
+      scale_ SMALLINT NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$describe_parameter'
+    ENGINE UDR;
+
+  FUNCTION describe_parameters(stmt TY$POINTER NOT NULL) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$describe_parameters'
+    ENGINE UDR;
+
+  FUNCTION reset_parameters(stmt TY$POINTER NOT NULL, timeout INTEGER NOT NULL)
+    RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!stmt$reset_parameters'
+    ENGINE UDR;
+
+END^
+
+CREATE OR ALTER PACKAGE NANO$RSLT
+AS
+BEGIN
+
+  FUNCTION valid(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  FUNCTION release_(rslt TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION connection(rslt TY$POINTER NOT NULL) RETURNS TY$POINTER;
+
+  FUNCTION rowset_size(rslt TY$POINTER NOT NULL) RETURNS INTEGER;
+  FUNCTION affected_rows(rslt TY$POINTER NOT NULL) RETURNS INTEGER;
+  FUNCTION has_affected_rows(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION rows_(rslt TY$POINTER NOT NULL) RETURNS INTEGER;
+  FUNCTION columns(rslt TY$POINTER NOT NULL) RETURNS SMALLINT;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION first_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION last_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION next_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION prior_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION move(rslt TY$POINTER NOT NULL, row_ INTEGER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION skip_(rslt TY$POINTER NOT NULL, row_ INTEGER NOT NULL) RETURNS BOOLEAN;
+  FUNCTION position_(rslt TY$POINTER NOT NULL) RETURNS INTEGER;
+  FUNCTION at_end(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION get_smallint(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS SMALLINT;
+
+  FUNCTION get_integer(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS INTEGER;
+
+/*
+  FUNCTION get_bigint(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BIGINT;
+*/
+
+  FUNCTION get_float(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS FLOAT;
+
+  FUNCTION get_double(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS DOUBLE PRECISION;
+
+  FUNCTION get_varchar_s(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(64) CHARACTER SET NONE;
+
+  FUNCTION get_varchar(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(256) CHARACTER SET NONE;
+
+  FUNCTION get_varchar_l(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(1024) CHARACTER SET NONE;
+
+  FUNCTION get_varchar_xl (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(8192) CHARACTER SET NONE;
+
+  FUNCTION get_varchar_xxl (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE;
+
+  FUNCTION get_char_s (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(64) CHARACTER SET NONE;
+
+  FUNCTION get_char (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(256) CHARACTER SET NONE;
+
+  FUNCTION get_char_l (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(1024) CHARACTER SET NONE;
+
+  FUNCTION get_char_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(8192) CHARACTER SET NONE;
+
+  FUNCTION get_char_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(32767) CHARACTER SET NONE;
+
+  FUNCTION get_u8_varchar(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(64) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_varchar_l(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(256) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_varchar_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(2048) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_varchar_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(8191) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_char(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(64) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_char_l(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(256) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_char_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(2048) CHARACTER SET UTF8;
+
+  FUNCTION get_u8_char_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(8191) CHARACTER SET UTF8;
+
+  FUNCTION get_blob(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BLOB;
+
+  FUNCTION get_boolean(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BOOLEAN;
+
+  FUNCTION get_date(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS DATE;
+
+/*
+  FUNCTION get_time(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TIME;
+*/
+
+  FUNCTION get_timestamp(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TIMESTAMP;
+
+  FUNCTION convert_varchar_s(
+      value_ VARCHAR(64) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(64) CHARACTER SET NONE;
+
+  FUNCTION convert_varchar(
+      value_ VARCHAR(256) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(256) CHARACTER SET NONE;
+
+  FUNCTION convert_varchar_l(
+      value_ VARCHAR(1024) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(1024) CHARACTER SET NONE;
+
+  FUNCTION convert_varchar_xl(
+      value_ VARCHAR(8192) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(8192) CHARACTER SET NONE;
+
+  FUNCTION convert_varchar_xxl(
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE;
+
+  FUNCTION convert_char_s(
+      value_ CHAR(64) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(64) CHARACTER SET NONE;
+
+  FUNCTION convert_char(
+      value_ CHAR(256) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(256) CHARACTER SET NONE;
+
+  FUNCTION convert_char_l(
+      value_ CHAR(1024) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(1024) CHARACTER SET NONE;
+
+  FUNCTION convert_char_xl(
+      value_ CHAR(8192) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(8192) CHARACTER SET NONE;
+
+  FUNCTION convert_char_xxl(
+      value_ CHAR(32767) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL DEFAULT 0
+    ) RETURNS CHAR(32767) CHARACTER SET NONE;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION unbind(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS TY$NANO_BLANK;
+
+  FUNCTION is_null(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS BOOLEAN;
+
+  FUNCTION is_bound( -- now hiding exception out of range
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS BOOLEAN;
+
+  FUNCTION column_(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS SMALLINT;
+
+  FUNCTION column_name(rslt TY$POINTER NOT NULL, index_ SMALLINT NOT NULL)
+    RETURNS VARCHAR(63) CHARACTER SET UTF8;
+
+  FUNCTION column_size(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER;
+
+  FUNCTION column_decimal_digits(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER;
+
+  FUNCTION column_datatype(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER;
+
+  FUNCTION column_datatype_name(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS VARCHAR(63) CHARACTER SET UTF8;
+
+  FUNCTION column_c_datatype(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER;
+
+  FUNCTION next_result(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION has_data(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN;
+
+END^
+
+RECREATE PACKAGE BODY NANO$RSLT
+AS
+BEGIN
+
+  FUNCTION valid(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$valid'
+    ENGINE UDR;
+
+  FUNCTION release_(rslt TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!rslt$release'
+    ENGINE UDR;
+
+  FUNCTION connection(rslt TY$POINTER NOT NULL) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!rslt$connection'
+    ENGINE UDR;
+
+  FUNCTION rowset_size(rslt TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$rowset_size'
+    ENGINE UDR;
+
+  FUNCTION affected_rows(rslt TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$affected_rows'
+    ENGINE UDR;
+
+  FUNCTION has_affected_rows(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$has_affected_rows'
+    ENGINE UDR;
+
+  FUNCTION rows_(rslt TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$rows'
+    ENGINE UDR;
+
+  FUNCTION columns(rslt TY$POINTER NOT NULL) RETURNS SMALLINT
+    EXTERNAL NAME 'nano!rslt$columns'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION first_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$first'
+    ENGINE UDR;
+
+  FUNCTION last_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$last'
+    ENGINE UDR;
+
+  FUNCTION next_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$next'
+    ENGINE UDR;
+
+  FUNCTION prior_(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$prior'
+    ENGINE UDR;
+
+  FUNCTION move(rslt TY$POINTER NOT NULL, row_ INTEGER NOT NULL) RETURNS BOOLEAN
+     EXTERNAL NAME 'nano!rslt$move'
+     ENGINE UDR;
+
+  FUNCTION skip_(rslt TY$POINTER NOT NULL, row_ INTEGER NOT NULL) RETURNS BOOLEAN
+     EXTERNAL NAME 'nano!rslt$skip'
+     ENGINE UDR;
+
+  FUNCTION position_(rslt TY$POINTER NOT NULL) RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$position'
+    ENGINE UDR;
+
+  FUNCTION at_end(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$at_end'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION get_smallint(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS SMALLINT
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_integer(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+/*
+  FUNCTION get_bigint(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BIGINT
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+*/
+
+  FUNCTION get_float(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS FLOAT
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_double(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS DOUBLE PRECISION
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_varchar_s(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(64) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_varchar(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(256) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_varchar_l (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(1024) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_varchar_xl (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(8192) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_varchar_xxl (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_char_s (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(64) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_char (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(256) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_char_l (
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(1024) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_char_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(8192) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_char_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(32767) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_varchar(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(64) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_varchar_l(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(256) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_varchar_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(2048) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_varchar_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS VARCHAR(8191) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_char(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(64) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_char_l(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(256) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_char_xl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(2048) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_u8_char_xxl(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS CHAR(8191) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_blob(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BLOB
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_boolean(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION get_date(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS DATE
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+/*
+  FUNCTION get_time(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TIME
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+*/
+
+  FUNCTION get_timestamp(
+      rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL
+    ) RETURNS TIMESTAMP
+    EXTERNAL NAME 'nano!rslt$get'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar_s(
+      value_ VARCHAR(64) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(64) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar(
+      value_ VARCHAR(256) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(256) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar_l(
+      value_ VARCHAR(1024) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(1024) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar_xl(
+      value_ VARCHAR(8192) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(8192) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_varchar_xxl(
+      value_ VARCHAR(32765) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS VARCHAR(32765) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char_s(
+      value_ CHAR(64) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(64) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char(
+      value_ CHAR(256) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(256) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char_l(
+      value_ CHAR(1024) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(1024) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char_xl(
+      value_ CHAR(8192) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(8192) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  FUNCTION convert_char_xxl(
+      value_ CHAR(32767) CHARACTER SET NONE,
+      from_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      to_ VARCHAR(20) CHARACTER SET NONE NOT NULL,
+      convert_size SMALLINT NOT NULL
+    ) RETURNS CHAR(32767) CHARACTER SET NONE
+    EXTERNAL NAME 'nano!udr$convert'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION unbind(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!rslt$unbind'
+    ENGINE UDR;
+
+  FUNCTION is_null(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$is_null'
+    ENGINE UDR;
+
+  FUNCTION is_bound(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$is_bound'
+    ENGINE UDR;
+
+  FUNCTION column_(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS SMALLINT
+    EXTERNAL NAME 'nano!rslt$column'
+    ENGINE UDR;
+
+  FUNCTION column_name(rslt TY$POINTER NOT NULL, index_ SMALLINT NOT NULL)
+    RETURNS VARCHAR(63) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$column_name'
+    ENGINE UDR;
+
+  FUNCTION column_size(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$column_size'
+    ENGINE UDR;
+
+  FUNCTION column_decimal_digits(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$column_decimal_digits'
+    ENGINE UDR;
+
+  FUNCTION column_datatype(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$column_datatype'
+    ENGINE UDR;
+
+  FUNCTION column_datatype_name(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS VARCHAR(63) CHARACTER SET UTF8
+    EXTERNAL NAME 'nano!rslt$column_datatype_name'
+    ENGINE UDR;
+
+  FUNCTION column_c_datatype(rslt TY$POINTER NOT NULL, column_ VARCHAR(63) CHARACTER SET UTF8 NOT NULL)
+    RETURNS INTEGER
+    EXTERNAL NAME 'nano!rslt$column_c_datatype'
+    ENGINE UDR;
+
+  FUNCTION next_result(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$next_result'
+    ENGINE UDR;
+
+  ------------------------------------------------------------------------------
+
+  FUNCTION has_data(rslt TY$POINTER NOT NULL) RETURNS BOOLEAN
+    EXTERNAL NAME 'nano!rslt$has_data'
+    ENGINE UDR;
+
+END^
+
+CREATE OR ALTER PACKAGE NANO$FUNC
+AS
+BEGIN
+  
+  /*  Note:
+        Result cursor by default ODBC driver (NANODBC implementation),
+        scrollable into NANO$STMT
+   */
+
+  FUNCTION execute_conn(
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$POINTER;
+
+  FUNCTION just_execute_conn(
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL DEFAULT 1,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION execute_stmt(
+      stmt TY$POINTER NOT NULL, batch_operations INTEGER NOT NULL DEFAULT 1
+    ) RETURNS TY$POINTER;
+
+  FUNCTION just_execute_stmt(
+      stmt TY$POINTER NOT NULL, batch_operations INTEGER NOT NULL DEFAULT 1
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION transact_stmt(
+      stmt TY$POINTER NOT NULL, batch_operations INTEGER NOT NULL DEFAULT 1
+    ) RETURNS TY$POINTER;
+
+  FUNCTION just_transact_stmt(
+      stmt TY$POINTER NOT NULL, batch_operations INTEGER NOT NULL DEFAULT 1
+    ) RETURNS TY$NANO_BLANK;
+
+  FUNCTION prepare_stmt(
+      stmt TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      timeout INTEGER NOT NULL DEFAULT 0
+    ) RETURNS TY$NANO_BLANK;
+
+END^
+
+RECREATE PACKAGE BODY NANO$FUNC
+AS
+BEGIN
+
+  FUNCTION execute_conn(
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!func$execute_conn'
+    ENGINE UDR;
+
+  FUNCTION just_execute_conn(
+      conn TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      batch_operations INTEGER NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!func$just_execute_conn'
+    ENGINE UDR;
+
+  FUNCTION execute_stmt(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!func$execute_stmt'
+    ENGINE UDR;
+
+  FUNCTION just_execute_stmt(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!func$just_execute_stmt'
+    ENGINE UDR;
+
+  FUNCTION transact_stmt(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL
+    ) RETURNS TY$POINTER
+    EXTERNAL NAME 'nano!func$transact_stmt'
+    ENGINE UDR;
+
+  FUNCTION just_transact_stmt(
+      stmt TY$POINTER NOT NULL,
+      batch_operations INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!func$just_transact_stmt'
+    ENGINE UDR;
+
+  FUNCTION prepare_stmt(
+      stmt TY$POINTER NOT NULL,
+      query VARCHAR(8191) CHARACTER SET UTF8 NOT NULL,
+      timeout INTEGER NOT NULL
+    ) RETURNS TY$NANO_BLANK
+    EXTERNAL NAME 'nano!func$prepare_stmt'
+    ENGINE UDR;
+
+END^
+
+CREATE OR ALTER PACKAGE NANO$CTLG
+AS
+BEGIN
+ 
+END^
+
+RECREATE PACKAGE BODY NANO$CTLG
+AS
+BEGIN
+ 
+END^
+
+SET TERM ; ^
